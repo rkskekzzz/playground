@@ -1,23 +1,26 @@
+"use client";
 
-'use client'
-
-import { useState } from 'react'
-import { AddMemberForm } from '@/components/members/AddMemberForm'
-import { MemberList } from '@/components/members/MemberList'
-import { GameHistory } from '@/components/game/GameHistory'
+import { useState } from "react";
+import { AddMemberForm } from "@/components/members/AddMemberForm";
+import { MemberList } from "@/components/members/MemberList";
+import { GameHistory } from "@/components/game/GameHistory";
 
 export default function DashboardPage() {
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const handleMemberAdded = () => {
-    setRefreshTrigger(prev => prev + 1)
-  }
+    setRefreshTrigger((prev) => prev + 1);
+  };
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Member Management</h1>
-        <p className="text-zinc-400">Add and manage your scrim members here.</p>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">
+          Member Management
+        </h1>
+        <p className="text-zinc-400 text-sm md:text-base">
+          Add and manage your scrim members here.
+        </p>
       </div>
 
       <AddMemberForm onMemberAdded={handleMemberAdded} />
@@ -32,5 +35,5 @@ export default function DashboardPage() {
         <GameHistory />
       </div>
     </div>
-  )
+  );
 }

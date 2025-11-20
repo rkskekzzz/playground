@@ -1,95 +1,99 @@
+"use client";
 
-'use client'
-
-import { useState } from 'react'
-import { PlayerPool } from '@/components/teambuilder/PlayerPool'
-import { ConstraintControls } from '@/components/teambuilder/ConstraintControls'
-import { TeamDisplay } from '@/components/teambuilder/TeamDisplay'
-import { Player, TeamResult, generateTeams } from '@/lib/teamLogic'
-import { Member } from '@/types'
-import { Button } from '@/components/ui/button'
-import { toast } from 'sonner'
-import { Wand2 } from 'lucide-react'
-import { supabase } from '@/lib/supabaseClient'
+import { useState } from "react";
+import { PlayerPool } from "@/components/teambuilder/PlayerPool";
+import { PlayerPoolMobile } from "@/components/teambuilder/PlayerPoolMobile";
+import { ConstraintControls } from "@/components/teambuilder/ConstraintControls";
+import { ConstraintControlsMobile } from "@/components/teambuilder/ConstraintControlsMobile";
+import { FixedPositionMobile } from "@/components/teambuilder/FixedPositionMobile";
+import { TeamDisplay } from "@/components/teambuilder/TeamDisplay";
+import { Player, TeamResult, generateTeams } from "@/lib/teamLogic";
+import { Member } from "@/types";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { Wand2 } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function TeamBuilderPage() {
-  const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([])
-  const [groups, setGroups] = useState<{ [key: string]: string[] }>({})
-  const [teamResult, setTeamResult] = useState<TeamResult | null>(null)
-  const [isGenerating, setIsGenerating] = useState(false)
+  const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
+  const [groups, setGroups] = useState<{ [key: string]: string[] }>({});
+  const [teamResult, setTeamResult] = useState<TeamResult | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleTogglePlayer = (member: Member) => {
-    setSelectedPlayers(prev => {
-      const exists = prev.find(p => p.id === member.id)
+    setSelectedPlayers((prev) => {
+      const exists = prev.find((p) => p.id === member.id);
       if (exists) {
-        return prev.filter(p => p.id !== member.id)
+        return prev.filter((p) => p.id !== member.id);
       } else {
         if (prev.length >= 10) {
-          toast.error("Max 10 players allowed")
-          return prev
+          toast.error("Max 10 players allowed");
+          return prev;
         }
-        return [...prev, { ...member }]
+        return [...prev, { ...member }];
       }
-    })
-  }
+    });
+  };
 
   const handleUpdatePlayer = (playerId: string, updates: Partial<Player>) => {
-    setSelectedPlayers(prev => prev.map(p => p.id === playerId ? { ...p, ...updates } : p))
-  }
+    setSelectedPlayers((prev) =>
+      prev.map((p) => (p.id === playerId ? { ...p, ...updates } : p))
+    );
+  };
 
   const handleCreateGroup = (memberIds: string[]) => {
-    const groupId = Math.random().toString(36).substring(7)
-    setGroups(prev => ({ ...prev, [groupId]: memberIds }))
-  }
+    const groupId = Math.random().toString(36).substring(7);
+    setGroups((prev) => ({ ...prev, [groupId]: memberIds }));
+  };
 
   const handleDeleteGroup = (groupId: string) => {
-    setGroups(prev => {
-      const next = { ...prev }
-      delete next[groupId]
-      return next
-    })
-  }
+    setGroups((prev) => {
+      const next = { ...prev };
+      delete next[groupId];
+      return next;
+    });
+  };
 
   const handleGenerate = () => {
     if (selectedPlayers.length !== 10) {
-      toast.error("Please select exactly 10 players")
-      return
+      toast.error("Please select exactly 10 players");
+      return;
     }
 
-    setIsGenerating(true)
+    setIsGenerating(true);
     // Small delay for UX
     setTimeout(() => {
-      const result = generateTeams(selectedPlayers, groups)
+      const result = generateTeams(selectedPlayers, groups);
       if (result) {
-        setTeamResult(result)
-        toast.success("Teams generated!")
+        setTeamResult(result);
+        toast.success("Teams generated!");
       } else {
-        toast.error("Failed to generate valid teams with current constraints")
+        toast.error("Failed to generate valid teams with current constraints");
       }
-      setIsGenerating(false)
-    }, 500)
-  }
+      setIsGenerating(false);
+    }, 500);
+  };
 
-  const handleRecordWin = async (winningTeam: 'BLUE' | 'RED') => {
-    if (!teamResult) return
+  const handleRecordWin = async (winningTeam: "BLUE" | "RED") => {
+    if (!teamResult) return;
 
     try {
       // 1. Create Game
       const { data: gameData, error: gameError } = await supabase
-        .from('games')
+        .from("games")
         .insert([{ winning_team: winningTeam }])
         .select()
-        .single()
+        .single();
 
-      if (gameError) throw gameError
+      if (gameError) throw gameError;
 
       // 2. Create Participants
       const participants: {
-        game_id: string
-        member_id: string
-        team: 'BLUE' | 'RED'
-        position: string
-      }[] = []
+        game_id: string;
+        member_id: string;
+        team: "BLUE" | "RED";
+        position: string;
+      }[] = [];
 
       // Blue Team
       Object.entries(teamResult.blue).forEach(([pos, player]) => {
@@ -97,11 +101,11 @@ export default function TeamBuilderPage() {
           participants.push({
             game_id: gameData.id,
             member_id: player.id,
-            team: 'BLUE',
-            position: pos
-          })
+            team: "BLUE",
+            position: pos,
+          });
         }
-      })
+      });
 
       // Red Team
       Object.entries(teamResult.red).forEach(([pos, player]) => {
@@ -109,70 +113,77 @@ export default function TeamBuilderPage() {
           participants.push({
             game_id: gameData.id,
             member_id: player.id,
-            team: 'RED',
-            position: pos
-          })
+            team: "RED",
+            position: pos,
+          });
         }
-      })
+      });
 
       const { error: partError } = await supabase
-        .from('game_participants')
-        .insert(participants)
+        .from("game_participants")
+        .insert(participants);
 
-      if (partError) throw partError
+      if (partError) throw partError;
 
       toast.success(`${winningTeam} team win recorded!`, {
         action: {
-          label: 'Undo',
+          label: "Undo",
           onClick: async () => {
             const { error: deleteError } = await supabase
-              .from('games')
+              .from("games")
               .delete()
-              .eq('id', gameData.id)
+              .eq("id", gameData.id);
 
             if (deleteError) {
-              toast.error("Failed to undo game")
+              toast.error("Failed to undo game");
             } else {
-              toast.success("Game recording undone")
+              toast.success("Game recording undone");
             }
-          }
+          },
         },
         duration: 5000,
-      })
+      });
     } catch (error: any) {
-      toast.error("Failed to save game result: " + error.message)
+      toast.error("Failed to save game result: " + error.message);
     }
-  }
+  };
 
   return (
     <div className="h-full flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Team Builder</h1>
-          <p className="text-zinc-400">Select players and generate balanced teams.</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+            Team Builder
+          </h1>
+          <p className="text-zinc-400 text-sm md:text-base">
+            Select players and generate balanced teams.
+          </p>
         </div>
         <Button
           size="lg"
           onClick={handleGenerate}
           disabled={isGenerating || selectedPlayers.length !== 10}
-          className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white border-0"
+          className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white border-0 w-full md:w-auto"
         >
-          <Wand2 className={`w-5 h-5 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
-          {isGenerating ? 'Generating...' : 'Generate Teams'}
+          <Wand2
+            className={`w-5 h-5 mr-2 ${isGenerating ? "animate-spin" : ""}`}
+          />
+          {isGenerating ? "Generating..." : "Generate Teams"}
         </Button>
       </div>
 
-      <div className="grid grid-cols-12 gap-6 flex-1 overflow-hidden">
-        {/* Left: Player Selection (3 cols) */}
-        <div className="col-span-3 h-full overflow-hidden">
+      {/* Desktop Layout */}
+      <div className="hidden lg:grid lg:grid-cols-12 gap-6">
+        {/* Left: Player Selection (3 cols on desktop) */}
+        <div className="lg:col-span-3">
           <PlayerPool
-            selectedIds={selectedPlayers.map(p => p.id)}
+            selectedIds={selectedPlayers.map((p) => p.id)}
             onToggle={handleTogglePlayer}
           />
         </div>
 
-        {/* Middle: Constraints (3 cols) */}
-        <div className="col-span-3 h-full overflow-y-auto pr-2">
+        {/* Middle: Constraints (3 cols on desktop) */}
+        <div className="lg:col-span-3">
           <ConstraintControls
             selectedPlayers={selectedPlayers}
             onUpdatePlayer={handleUpdatePlayer}
@@ -182,14 +193,37 @@ export default function TeamBuilderPage() {
           />
         </div>
 
-        {/* Right: Result (6 cols) */}
-        <div className="col-span-6 h-full overflow-y-auto">
-          <TeamDisplay
-            result={teamResult}
-            onRecordWin={handleRecordWin}
-          />
+        {/* Right: Result (6 cols on desktop) */}
+        <div className="lg:col-span-6">
+          <TeamDisplay result={teamResult} onRecordWin={handleRecordWin} />
         </div>
       </div>
+
+      {/* Mobile Layout */}
+      <div className="flex flex-col lg:hidden gap-4 pb-12">
+        {/* Player Pool - Bottom Sheet */}
+        <PlayerPoolMobile
+          selectedIds={selectedPlayers.map((p) => p.id)}
+          onToggle={handleTogglePlayer}
+        />
+
+        {/* Fixed Positions - Bottom Sheet */}
+        <FixedPositionMobile
+          selectedPlayers={selectedPlayers}
+          onUpdatePlayer={handleUpdatePlayer}
+        />
+
+        {/* Pre-made Groups - Modal */}
+        <ConstraintControlsMobile
+          selectedPlayers={selectedPlayers}
+          groups={groups}
+          onCreateGroup={handleCreateGroup}
+          onDeleteGroup={handleDeleteGroup}
+        />
+
+        {/* Team Result */}
+        <TeamDisplay result={teamResult} onRecordWin={handleRecordWin} />
+      </div>
     </div>
-  )
+  );
 }
