@@ -149,7 +149,7 @@ export default function TeamBuilderPage() {
   };
 
   return (
-    <div className="h-full flex flex-col gap-6">
+    <div className="flex flex-col gap-6 h-[calc(100vh-6rem)] md:h-[calc(100vh-3rem)]">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
@@ -173,9 +173,9 @@ export default function TeamBuilderPage() {
       </div>
 
       {/* Desktop Layout */}
-      <div className="hidden lg:grid lg:grid-cols-12 gap-6">
+      <div className="hidden lg:grid lg:grid-cols-12 gap-6 flex-1 min-h-0">
         {/* Left: Player Selection (3 cols on desktop) */}
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-3 h-full min-h-0">
           <PlayerPool
             selectedIds={selectedPlayers.map((p) => p.id)}
             onToggle={handleTogglePlayer}

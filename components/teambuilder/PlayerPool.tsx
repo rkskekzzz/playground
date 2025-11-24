@@ -36,7 +36,7 @@ export function PlayerPool({ selectedIds, onToggle }: PlayerPoolProps) {
   );
 
   return (
-    <div className="border border-zinc-800 rounded-xl bg-zinc-900/30 flex flex-col overflow-hidden">
+    <div className="border border-zinc-800 rounded-xl bg-zinc-900/30 flex flex-col overflow-hidden h-full">
       <div className="p-4 border-b border-zinc-800 space-y-3 shrink-0">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-zinc-200">Player Pool</h3>
@@ -55,7 +55,7 @@ export function PlayerPool({ selectedIds, onToggle }: PlayerPoolProps) {
         </div>
       </div>
 
-      <ScrollArea className="w-full max-h-[600px]">
+      <ScrollArea className="w-full flex-1 min-h-0">
         <div className="p-2 grid grid-cols-1 gap-1">
           {filteredMembers.map((member) => {
             const isSelected = selectedIds.includes(member.id);
