@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Search } from "lucide-react";
+import { useTeam } from "@/context/TeamContext";
 
 interface PlayerPoolProps {
   selectedIds: string[];
@@ -15,19 +16,23 @@ interface PlayerPoolProps {
 }
 
 export function PlayerPool({ selectedIds, onToggle }: PlayerPoolProps) {
+  const { currentTeam } = useTeam();
   const [members, setMembers] = useState<Member[]>([]);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
+    if (!currentTeam) return;
+
     const fetchMembers = async () => {
       const { data } = await supabase
         .from("members")
         .select("*")
+        .eq("team_id", currentTeam.id)
         .order("nickname", { ascending: true });
       if (data) setMembers(data);
     };
     fetchMembers();
-  }, []);
+  }, [currentTeam]);
 
   const filteredMembers = members.filter(
     (m) =>

@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { useTeam } from "@/context/TeamContext";
 
 const formSchema = z.object({
   nickname: z.string().min(1, "Nickname is required"),
@@ -31,6 +32,7 @@ interface AddMemberFormProps {
 }
 
 export function AddMemberForm({ onMemberAdded }: AddMemberFormProps) {
+  const { currentTeam } = useTeam();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const {
     register,
@@ -44,10 +46,12 @@ export function AddMemberForm({ onMemberAdded }: AddMemberFormProps) {
   });
 
   const onSubmit = async (data: FormData) => {
+    if (!currentTeam) return;
     setIsSubmitting(true);
     try {
       const { error } = await supabase.from("members").insert([
         {
+          team_id: currentTeam.id,
           nickname: data.nickname,
           lol_id: data.lol_id,
           main_position: data.main_position || null,

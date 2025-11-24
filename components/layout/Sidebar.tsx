@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, Gamepad2, Settings, History } from "lucide-react";
+import { Users, Gamepad2, Settings, History, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTeam } from "@/context/TeamContext";
 
 const navItems = [
   { name: "Team Builder", href: "/", icon: Gamepad2 },
@@ -13,6 +14,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { logout } = useTeam();
 
   return (
     <div className="hidden md:flex flex-col h-screen w-16 bg-zinc-900 border-r border-zinc-800 items-center py-4">
@@ -44,9 +46,13 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="mt-auto">
-        <button className="p-3 text-zinc-400 hover:text-white transition-colors">
-          <Settings size={24} strokeWidth={1.5} />
+      <div className="mt-auto flex flex-col gap-4">
+        <button
+          onClick={logout}
+          className="p-3 text-zinc-400 hover:text-red-400 transition-colors"
+          title="Logout"
+        >
+          <LogOut size={24} strokeWidth={1.5} />
         </button>
       </div>
     </div>

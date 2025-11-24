@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { GameCard } from './GameCard'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Loader2 } from 'lucide-react'
+import { useTeam } from '@/context/TeamContext'
 
 // Type definition for the joined query result
 type GameData = {
@@ -26,6 +27,7 @@ type GameData = {
 const PAGE_SIZE = 30
 
 export function GameList() {
+  const { currentTeam } = useTeam()
   const [games, setGames] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
@@ -44,6 +46,7 @@ export function GameList() {
   }, [loading, hasMore])
 
   const fetchGames = async (pageIndex: number) => {
+    if (!currentTeam) return
     setLoading(true)
     const from = pageIndex * PAGE_SIZE
     const to = from + PAGE_SIZE - 1
@@ -62,6 +65,7 @@ export function GameList() {
           )
         )
       `)
+      .eq('team_id', currentTeam.id)
       .order('played_at', { ascending: false })
       .range(from, to)
 
@@ -85,8 +89,14 @@ export function GameList() {
   }
 
   useEffect(() => {
+    setPage(0)
+    setGames([])
+    setHasMore(true)
+  }, [currentTeam])
+
+  useEffect(() => {
     fetchGames(page)
-  }, [page])
+  }, [page, currentTeam])
 
   return (
     <ScrollArea className="h-full w-full rounded-md border border-zinc-800 bg-zinc-950/30">

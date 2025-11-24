@@ -3,8 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Users, Gamepad2, History } from "lucide-react";
+import { Menu, X, Users, Gamepad2, History, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTeam } from "@/context/TeamContext";
 
 const navItems = [
   { name: "Team Builder", href: "/", icon: Gamepad2 },
@@ -15,6 +16,7 @@ const navItems = [
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
+  const { logout } = useTeam();
 
   return (
     <>
@@ -65,8 +67,8 @@ export function Header() {
               </div>
 
               {/* Navigation */}
-              <nav className="flex-1 p-4">
-                <div className="space-y-2">
+              <nav className="flex-1 p-4 flex flex-col">
+                <div className="space-y-2 flex-1">
                   {navItems.map((item) => {
                     const isActive = pathname === item.href;
                     return (
@@ -86,6 +88,18 @@ export function Header() {
                       </Link>
                     );
                   })}
+                </div>
+                <div className="pt-4 border-t border-zinc-800">
+                  <button
+                    onClick={() => {
+                      logout();
+                      setIsMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-800/50 transition-all duration-200"
+                  >
+                    <LogOut size={20} strokeWidth={1.5} />
+                    <span className="font-medium">Logout</span>
+                  </button>
                 </div>
               </nav>
             </div>

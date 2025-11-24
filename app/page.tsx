@@ -11,14 +11,29 @@ import { Player, TeamResult, generateTeams } from "@/lib/teamLogic";
 import { Member } from "@/types";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Wand2 } from "lucide-react";
+import { Wand2, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { useTeam } from "@/context/TeamContext";
+import { LoginScreen } from "@/components/auth/LoginScreen";
 
 export default function TeamBuilderPage() {
+  const { currentTeam, isLoading: isAuthLoading } = useTeam();
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
   const [groups, setGroups] = useState<{ [key: string]: string[] }>({});
   const [teamResult, setTeamResult] = useState<TeamResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  if (isAuthLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-8 h-8 animate-spin text-zinc-500" />
+      </div>
+    );
+  }
+
+  if (!currentTeam) {
+    return <LoginScreen />;
+  }
 
   const handleTogglePlayer = (member: Member) => {
     setSelectedPlayers((prev) => {
@@ -75,13 +90,13 @@ export default function TeamBuilderPage() {
   };
 
   const handleRecordWin = async (winningTeam: "BLUE" | "RED") => {
-    if (!teamResult) return;
+    if (!teamResult || !currentTeam) return;
 
     try {
       // 1. Create Game
       const { data: gameData, error: gameError } = await supabase
         .from("games")
-        .insert([{ winning_team: winningTeam }])
+        .insert([{ winning_team: winningTeam, team_id: currentTeam.id }])
         .select()
         .single();
 

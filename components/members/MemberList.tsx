@@ -15,22 +15,26 @@ import { Button } from "@/components/ui/button";
 import { Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { EditMemberModal } from "./EditMemberModal";
+import { useTeam } from "@/context/TeamContext";
 
 interface MemberListProps {
   refreshTrigger: number;
 }
 
 export function MemberList({ refreshTrigger }: MemberListProps) {
+  const { currentTeam } = useTeam();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const fetchMembers = async () => {
+    if (!currentTeam) return;
     setLoading(true);
     const { data, error } = await supabase
       .from("members")
       .select("*")
+      .eq("team_id", currentTeam.id)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -43,7 +47,7 @@ export function MemberList({ refreshTrigger }: MemberListProps) {
 
   useEffect(() => {
     fetchMembers();
-  }, [refreshTrigger]);
+  }, [refreshTrigger, currentTeam]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this member?")) return;
