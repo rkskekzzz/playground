@@ -7,28 +7,22 @@ import { GameCard } from './GameCard'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Loader2 } from 'lucide-react'
 import { useTeam } from '@/context/TeamContext'
+import { Game, GameParticipant } from '@/types'
 
-// Type definition for the joined query result
-type GameData = {
-  id: string
-  played_at: string
-  winning_team: 'BLUE' | 'RED'
-  game_participants: {
-    id: string
-    team: 'BLUE' | 'RED'
-    position: 'TOP' | 'JUNGLE' | 'MID' | 'ADC' | 'SUPPORT'
+type GameWithDetails = Game & {
+  participants: (GameParticipant & {
     member: {
       nickname: string
       lol_id: string
     }
-  }[]
+  })[]
 }
 
 const PAGE_SIZE = 30
 
 export function GameList() {
   const { currentTeam } = useTeam()
-  const [games, setGames] = useState<any[]>([])
+  const [games, setGames] = useState<GameWithDetails[]>([])
   const [loading, setLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [page, setPage] = useState(0)
@@ -78,10 +72,10 @@ export function GameList() {
 
       // Transform data to match GameCard props structure if needed
       // The query structure matches closely, just need to map game_participants to participants
-      const formattedData = data.map(g => ({
+      const formattedData = (data ?? []).map(g => ({
         ...g,
         participants: g.game_participants
-      }))
+      })) as GameWithDetails[]
 
       setGames(prev => pageIndex === 0 ? formattedData : [...prev, ...formattedData])
     }
@@ -89,12 +83,14 @@ export function GameList() {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(0)
     setGames([])
     setHasMore(true)
   }, [currentTeam])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchGames(page)
   }, [page, currentTeam])
 

@@ -46,6 +46,7 @@ export function MemberList({ refreshTrigger }: MemberListProps) {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMembers();
   }, [refreshTrigger, currentTeam]);
 

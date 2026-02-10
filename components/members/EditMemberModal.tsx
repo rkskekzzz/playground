@@ -32,6 +32,11 @@ const formSchema = z.object({
 })
 
 type FormData = z.infer<typeof formSchema>
+type PositionOption = 'TOP' | 'JUNGLE' | 'MID' | 'ADC' | 'SUPPORT'
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown error'
+}
 
 interface EditMemberModalProps {
   member: Member | null
@@ -42,7 +47,7 @@ interface EditMemberModalProps {
 
 export function EditMemberModal({ member, open, onOpenChange, onMemberUpdated }: EditMemberModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(formSchema),
   })
 
@@ -51,7 +56,7 @@ export function EditMemberModal({ member, open, onOpenChange, onMemberUpdated }:
       setValue('nickname', member.nickname)
       setValue('lol_id', member.lol_id)
       if (member.main_position) {
-        setValue('main_position', member.main_position as any)
+        setValue('main_position', member.main_position)
       } else {
         setValue('main_position', undefined)
       }
@@ -77,8 +82,8 @@ export function EditMemberModal({ member, open, onOpenChange, onMemberUpdated }:
       toast.success('Member updated successfully!')
       onMemberUpdated()
       onOpenChange(false)
-    } catch (error: any) {
-      toast.error('Failed to update member: ' + error.message)
+    } catch (error: unknown) {
+      toast.error('Failed to update member: ' + getErrorMessage(error))
     } finally {
       setIsSubmitting(false)
     }
@@ -118,7 +123,7 @@ export function EditMemberModal({ member, open, onOpenChange, onMemberUpdated }:
           <div className="space-y-2">
             <Label htmlFor="position">Main Position (Optional)</Label>
             <Select
-              onValueChange={(val: any) => setValue('main_position', val)}
+              onValueChange={(val: PositionOption) => setValue('main_position', val)}
               defaultValue={member?.main_position || undefined}
             >
               <SelectTrigger>

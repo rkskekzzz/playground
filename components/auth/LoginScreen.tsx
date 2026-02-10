@@ -17,6 +17,10 @@ import {
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "An error occurred";
+}
+
 export function LoginScreen() {
   const { login } = useTeam();
   const [isRegistering, setIsRegistering] = useState(false);
@@ -65,9 +69,9 @@ export function LoginScreen() {
           toast.error("Invalid team name or password");
         }
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(error.message || "An error occurred");
+      toast.error(getErrorMessage(error));
     } finally {
       setIsLoading(false);
     }

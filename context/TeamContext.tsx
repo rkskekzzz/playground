@@ -4,7 +4,6 @@ import {
   createContext,
   useContext,
   useState,
-  useEffect,
   ReactNode,
 } from "react";
 
@@ -21,33 +20,41 @@ interface TeamContextType {
 }
 
 const TeamContext = createContext<TeamContextType | undefined>(undefined);
+const STORAGE_KEY = "team_playground_team";
+
+function readStoredTeam(): Team | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const storedTeam = localStorage.getItem(STORAGE_KEY);
+  if (!storedTeam) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(storedTeam) as Team;
+  } catch (error) {
+    console.error("Failed to parse stored team", error);
+    localStorage.removeItem(STORAGE_KEY);
+    return null;
+  }
+}
 
 export function TeamProvider({ children }: { children: ReactNode }) {
-  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Check local storage on mount
-    const storedTeam = localStorage.getItem("team_playground_team");
-    if (storedTeam) {
-      try {
-        setCurrentTeam(JSON.parse(storedTeam));
-      } catch (e) {
-        console.error("Failed to parse stored team", e);
-        localStorage.removeItem("team_playground_team");
-      }
-    }
-    setIsLoading(false);
-  }, []);
+  const [currentTeam, setCurrentTeam] = useState<Team | null>(() =>
+    readStoredTeam()
+  );
+  const isLoading = false;
 
   const login = (team: Team) => {
     setCurrentTeam(team);
-    localStorage.setItem("team_playground_team", JSON.stringify(team));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(team));
   };
 
   const logout = () => {
     setCurrentTeam(null);
-    localStorage.removeItem("team_playground_team");
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   return (

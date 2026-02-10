@@ -36,7 +36,6 @@ export function generateTeams(
 
   // 2. Separate players by constraints
   const fixedPlayers = players.filter(p => p.fixedPosition && p.selectedPosition)
-  const flexiblePlayers = players.filter(p => !p.fixedPosition || !p.selectedPosition)
 
   // 3. Initialize Teams
   // We'll try to fill slots.
@@ -51,13 +50,6 @@ export function generateTeams(
   const MAX_ATTEMPTS = 1000
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const blueTeam: Partial<Record<Position, Player>> = {}
-    const redTeam: Partial<Record<Position, Player>> = {}
-    const blueSlots = new Set<Position>(['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'])
-    const redSlots = new Set<Position>(['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'])
-
-    let validAttempt = true
-
     // A. Assign Fixed Players
     for (const p of fixedPlayers) {
       // Randomly assign to Blue or Red if not already taken?

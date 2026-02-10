@@ -26,6 +26,11 @@ const formSchema = z.object({
 });
 
 type FormData = z.infer<typeof formSchema>;
+type PositionOption = "TOP" | "JUNGLE" | "MID" | "ADC" | "SUPPORT";
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
+}
 
 interface AddMemberFormProps {
   onMemberAdded: () => void;
@@ -39,7 +44,6 @@ export function AddMemberForm({ onMemberAdded }: AddMemberFormProps) {
     handleSubmit,
     reset,
     setValue,
-    watch,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -63,8 +67,8 @@ export function AddMemberForm({ onMemberAdded }: AddMemberFormProps) {
       toast.success("Member added successfully!");
       reset();
       onMemberAdded();
-    } catch (error: any) {
-      toast.error("Failed to add member: " + error.message);
+    } catch (error: unknown) {
+      toast.error("Failed to add member: " + getErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -105,9 +109,11 @@ export function AddMemberForm({ onMemberAdded }: AddMemberFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="position">Main Position (Optional)</Label>
-              <Select
-                onValueChange={(val: any) => setValue("main_position", val)}
+            <Label htmlFor="position">Main Position (Optional)</Label>
+            <Select
+                onValueChange={(val: PositionOption) =>
+                  setValue("main_position", val)
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select Position" />
