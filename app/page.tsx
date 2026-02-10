@@ -67,6 +67,8 @@ export default function TeamBuilderPage() {
   const [groups, setGroups] = useState<GroupsState>({});
   const [teamResult, setTeamResult] = useState<TeamResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isRecordingWin, setIsRecordingWin] = useState(false);
+  const [generationId, setGenerationId] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
@@ -76,6 +78,7 @@ export default function TeamBuilderPage() {
       setSelectedPlayers([]);
       setGroups({});
       setTeamResult(null);
+      setGenerationId(null);
       setIsHydrated(false);
       return;
     }
@@ -100,6 +103,7 @@ export default function TeamBuilderPage() {
         setSelectedPlayers([]);
         setGroups({});
         setTeamResult(null);
+        setGenerationId(null);
         setIsHydrated(false);
         return;
       }
@@ -116,6 +120,7 @@ export default function TeamBuilderPage() {
         setSelectedPlayers([]);
         setGroups({});
         setTeamResult(null);
+        setGenerationId(null);
         setIsHydrated(true);
         return;
       }
@@ -182,6 +187,7 @@ export default function TeamBuilderPage() {
       setSelectedPlayers(restoredPlayers);
       setGroups(restoredState.groups);
       setTeamResult(null);
+      setGenerationId(null);
       setIsHydrated(true);
 
       if (!isSameTeamBuilderState(persistedState, restoredState)) {
@@ -282,13 +288,16 @@ export default function TeamBuilderPage() {
     }
 
     setIsGenerating(true);
+    setGenerationId(null);
     // Small delay for UX
     setTimeout(() => {
       const result = generateTeams(selectedPlayers, groups);
       if (result) {
         setTeamResult(result);
+        setGenerationId(crypto.randomUUID());
         toast.success("Teams generated!");
       } else {
+        setTeamResult(null);
         toast.error("Failed to generate valid teams with current constraints");
       }
       setIsGenerating(false);
@@ -296,13 +305,21 @@ export default function TeamBuilderPage() {
   };
 
   const handleRecordWin = async (winningTeam: "BLUE" | "RED") => {
-    if (!teamResult || !currentTeam) return;
+    if (!teamResult || !currentTeam || !generationId || isRecordingWin) return;
+
+    setIsRecordingWin(true);
 
     try {
       // 1. Create Game
       const { data: gameData, error: gameError } = await supabase
         .from("games")
-        .insert([{ winning_team: winningTeam, team_id: currentTeam.id }])
+        .insert([
+          {
+            winning_team: winningTeam,
+            team_id: currentTeam.id,
+            generation_id: generationId,
+          },
+        ])
         .select()
         .single();
 
@@ -364,10 +381,24 @@ export default function TeamBuilderPage() {
         },
         duration: 5000,
       });
+
+      setGenerationId(null);
     } catch (error: unknown) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "23505"
+      ) {
+        toast.error("This matchup was already recorded.");
+        return;
+      }
+
       const message =
         error instanceof Error ? error.message : "Unknown error occurred";
       toast.error("Failed to save game result: " + message);
+    } finally {
+      setIsRecordingWin(false);
     }
   };
 
@@ -418,7 +449,11 @@ export default function TeamBuilderPage() {
 
         {/* Right: Result (6 cols on desktop) */}
         <div className="lg:col-span-6">
-          <TeamDisplay result={teamResult} onRecordWin={handleRecordWin} />
+          <TeamDisplay
+            result={teamResult}
+            onRecordWin={handleRecordWin}
+            isRecordingWin={isRecordingWin}
+          />
         </div>
       </div>
 
@@ -445,7 +480,11 @@ export default function TeamBuilderPage() {
         />
 
         {/* Team Result */}
-        <TeamDisplay result={teamResult} onRecordWin={handleRecordWin} />
+        <TeamDisplay
+          result={teamResult}
+          onRecordWin={handleRecordWin}
+          isRecordingWin={isRecordingWin}
+        />
       </div>
     </div>
   );

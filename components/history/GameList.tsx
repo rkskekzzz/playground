@@ -82,6 +82,10 @@ export function GameList() {
     setLoading(false)
   }
 
+  const handleDeletedGame = (gameId: string) => {
+    setGames((prev) => prev.filter((game) => game.id !== gameId))
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(0)
@@ -101,11 +105,11 @@ export function GameList() {
           if (games.length === index + 1) {
             return (
               <div ref={lastGameElementRef} key={game.id}>
-                <GameCard game={game} />
+                <GameCard game={game} onDeleted={handleDeletedGame} />
               </div>
             )
           } else {
-            return <GameCard key={game.id} game={game} />
+            return <GameCard key={game.id} game={game} onDeleted={handleDeletedGame} />
           }
         })}
 

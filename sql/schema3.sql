@@ -81,3 +81,11 @@ BEGIN
   END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 8. Add generation_id to games to prevent duplicate win recording per generated matchup
+ALTER TABLE games ADD COLUMN IF NOT EXISTS generation_id UUID;
+
+-- Ensure only one win record can be saved for the same generated matchup in a team
+CREATE UNIQUE INDEX IF NOT EXISTS games_team_generation_unique_idx
+  ON games(team_id, generation_id)
+  WHERE generation_id IS NOT NULL;
