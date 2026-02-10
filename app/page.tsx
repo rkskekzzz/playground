@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PlayerPool } from "@/components/teambuilder/PlayerPool";
 import { PlayerPoolMobile } from "@/components/teambuilder/PlayerPoolMobile";
 import { ConstraintControls } from "@/components/teambuilder/ConstraintControls";
@@ -15,13 +15,202 @@ import { Wand2, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useTeam } from "@/context/TeamContext";
 import { LoginScreen } from "@/components/auth/LoginScreen";
+import { readLocalState, writeLocalState } from "@/lib/persistence/localStorage";
+import {
+  getTeamBuilderStorageKey,
+  isSameTeamBuilderState,
+  safeParseTeamBuilderState,
+  sanitizeGroups,
+  sanitizeTeamBuilderState,
+  TeamBuilderPersistedState,
+  TeamBuilderPlayerConstraint,
+} from "@/lib/persistence/schemas/teamBuilder";
+
+type GroupsState = Record<string, string[]>;
+
+function buildPlayerConstraints(
+  players: Player[]
+): Record<string, TeamBuilderPlayerConstraint> {
+  const constraints: Record<string, TeamBuilderPlayerConstraint> = {};
+
+  players.forEach((player) => {
+    constraints[player.id] = {
+      fixedPosition: Boolean(player.fixedPosition),
+      ...(player.selectedPosition
+        ? { selectedPosition: player.selectedPosition }
+        : {}),
+    };
+  });
+
+  return constraints;
+}
+
+function buildTeamBuilderPersistedState(
+  players: Player[],
+  groups: GroupsState
+): TeamBuilderPersistedState {
+  const selectedPlayerIds = players.map((player) => player.id);
+  const selectedIdSet = new Set(selectedPlayerIds);
+
+  return {
+    version: 1,
+    selectedPlayerIds,
+    playerConstraints: buildPlayerConstraints(players),
+    groups: sanitizeGroups(groups, selectedIdSet),
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 export default function TeamBuilderPage() {
   const { currentTeam, isLoading: isAuthLoading } = useTeam();
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
-  const [groups, setGroups] = useState<{ [key: string]: string[] }>({});
+  const [groups, setGroups] = useState<GroupsState>({});
   const [teamResult, setTeamResult] = useState<TeamResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const teamId = currentTeam?.id;
+
+    if (!teamId) {
+      setSelectedPlayers([]);
+      setGroups({});
+      setTeamResult(null);
+      setIsHydrated(false);
+      return;
+    }
+
+    let isCancelled = false;
+
+    const hydrateTeamBuilderState = async () => {
+      setIsHydrated(false);
+
+      const storageKey = getTeamBuilderStorageKey(teamId);
+      const { data: membersData, error: membersError } = await supabase
+        .from("members")
+        .select("*")
+        .eq("team_id", teamId)
+        .order("nickname", { ascending: true });
+
+      if (isCancelled) {
+        return;
+      }
+
+      if (membersError || !membersData) {
+        setSelectedPlayers([]);
+        setGroups({});
+        setTeamResult(null);
+        setIsHydrated(false);
+        return;
+      }
+
+      const memberById = new Map(membersData.map((member) => [member.id, member]));
+      const validMemberIds = new Set(membersData.map((member) => member.id));
+
+      const persistedState = readLocalState({
+        key: storageKey,
+        safeParse: safeParseTeamBuilderState,
+      });
+
+      if (!persistedState) {
+        setSelectedPlayers([]);
+        setGroups({});
+        setTeamResult(null);
+        setIsHydrated(true);
+        return;
+      }
+
+      const sanitizedPersistedState = sanitizeTeamBuilderState(
+        persistedState,
+        validMemberIds
+      );
+      const selectedPlayerIds = sanitizedPersistedState.selectedPlayerIds.slice(
+        0,
+        10
+      );
+      const selectedIdSet = new Set(selectedPlayerIds);
+      const playerConstraints: Record<string, TeamBuilderPlayerConstraint> = {};
+
+      selectedPlayerIds.forEach((playerId) => {
+        const constraint = sanitizedPersistedState.playerConstraints[playerId];
+        if (!constraint) {
+          return;
+        }
+
+        playerConstraints[playerId] = {
+          fixedPosition: constraint.fixedPosition,
+          ...(constraint.selectedPosition
+            ? { selectedPosition: constraint.selectedPosition }
+            : {}),
+        };
+      });
+
+      const sanitizedState = {
+        ...sanitizedPersistedState,
+        selectedPlayerIds,
+        playerConstraints,
+        groups: sanitizeGroups(sanitizedPersistedState.groups, selectedIdSet),
+      };
+
+      const restoredPlayers = sanitizedState.selectedPlayerIds
+        .map((playerId) => {
+          const member = memberById.get(playerId);
+          if (!member) {
+            return null;
+          }
+
+          const constraint = sanitizedState.playerConstraints[playerId];
+          return {
+            ...member,
+            ...(constraint
+              ? {
+                  fixedPosition: constraint.fixedPosition,
+                  ...(constraint.selectedPosition
+                    ? { selectedPosition: constraint.selectedPosition }
+                    : {}),
+                }
+              : {}),
+          };
+        })
+        .filter((player): player is Player => player !== null);
+
+      const restoredState = buildTeamBuilderPersistedState(
+        restoredPlayers,
+        sanitizedState.groups
+      );
+
+      setSelectedPlayers(restoredPlayers);
+      setGroups(restoredState.groups);
+      setTeamResult(null);
+      setIsHydrated(true);
+
+      if (!isSameTeamBuilderState(persistedState, restoredState)) {
+        writeLocalState({
+          key: storageKey,
+          value: restoredState,
+        });
+      }
+    };
+
+    void hydrateTeamBuilderState();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentTeam?.id]);
+
+  useEffect(() => {
+    const teamId = currentTeam?.id;
+    if (!teamId || !isHydrated) {
+      return;
+    }
+
+    const nextState = buildTeamBuilderPersistedState(selectedPlayers, groups);
+    writeLocalState({
+      key: getTeamBuilderStorageKey(teamId),
+      value: nextState,
+    });
+  }, [currentTeam?.id, groups, isHydrated, selectedPlayers]);
 
   if (isAuthLoading) {
     return (
@@ -39,7 +228,10 @@ export default function TeamBuilderPage() {
     setSelectedPlayers((prev) => {
       const exists = prev.find((p) => p.id === member.id);
       if (exists) {
-        return prev.filter((p) => p.id !== member.id);
+        const nextPlayers = prev.filter((p) => p.id !== member.id);
+        const selectedIdSet = new Set(nextPlayers.map((player) => player.id));
+        setGroups((prevGroups) => sanitizeGroups(prevGroups, selectedIdSet));
+        return nextPlayers;
       } else {
         if (prev.length >= 10) {
           toast.error("Max 10 players allowed");
@@ -51,14 +243,28 @@ export default function TeamBuilderPage() {
   };
 
   const handleUpdatePlayer = (playerId: string, updates: Partial<Player>) => {
+    const normalizedUpdates =
+      updates.fixedPosition === false
+        ? { ...updates, selectedPosition: undefined }
+        : updates;
+
     setSelectedPlayers((prev) =>
-      prev.map((p) => (p.id === playerId ? { ...p, ...updates } : p))
+      prev.map((p) => (p.id === playerId ? { ...p, ...normalizedUpdates } : p))
     );
   };
 
   const handleCreateGroup = (memberIds: string[]) => {
+    const selectedIdSet = new Set(selectedPlayers.map((player) => player.id));
+    const validMemberIds = Array.from(
+      new Set(memberIds.filter((memberId) => selectedIdSet.has(memberId)))
+    );
+
+    if (validMemberIds.length < 2 || validMemberIds.length > 5) {
+      return;
+    }
+
     const groupId = Math.random().toString(36).substring(7);
-    setGroups((prev) => ({ ...prev, [groupId]: memberIds }));
+    setGroups((prev) => ({ ...prev, [groupId]: validMemberIds }));
   };
 
   const handleDeleteGroup = (groupId: string) => {
@@ -158,8 +364,10 @@ export default function TeamBuilderPage() {
         },
         duration: 5000,
       });
-    } catch (error: any) {
-      toast.error("Failed to save game result: " + error.message);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      toast.error("Failed to save game result: " + message);
     }
   };
 
