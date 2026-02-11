@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 interface TeamDisplayProps {
   result: TeamResult | null
   onRecordWin: (team: 'BLUE' | 'RED') => void
+  isRecordingWin: boolean
 }
 
 const POSITIONS: Position[] = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT']
@@ -18,9 +19,10 @@ interface TeamCardProps {
   team: Record<Position, Player | null>
   side: 'BLUE' | 'RED'
   onRecordWin: (team: 'BLUE' | 'RED') => void
+  isRecordingWin: boolean
 }
 
-function TeamCard({ team, side, onRecordWin }: TeamCardProps) {
+function TeamCard({ team, side, onRecordWin, isRecordingWin }: TeamCardProps) {
   const buttonClass =
     side === 'BLUE'
       ? 'hover:bg-blue-950/30 hover:text-blue-400'
@@ -37,6 +39,7 @@ function TeamCard({ team, side, onRecordWin }: TeamCardProps) {
           variant="ghost"
           className={buttonClass}
           onClick={() => onRecordWin(side)}
+          disabled={isRecordingWin}
         >
           <Trophy className="w-4 h-4 mr-2" />
           Win
@@ -55,7 +58,7 @@ function TeamCard({ team, side, onRecordWin }: TeamCardProps) {
   )
 }
 
-export function TeamDisplay({ result, onRecordWin }: TeamDisplayProps) {
+export function TeamDisplay({ result, onRecordWin, isRecordingWin }: TeamDisplayProps) {
   if (!result) {
     return (
       <div className="h-full flex items-center justify-center border border-dashed border-zinc-800 rounded-xl bg-zinc-900/20">
@@ -88,8 +91,8 @@ SUP: ${result.red.SUPPORT?.nickname}
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <TeamCard team={result.blue} side="BLUE" onRecordWin={onRecordWin} />
-        <TeamCard team={result.red} side="RED" onRecordWin={onRecordWin} />
+        <TeamCard team={result.blue} side="BLUE" onRecordWin={onRecordWin} isRecordingWin={isRecordingWin} />
+        <TeamCard team={result.red} side="RED" onRecordWin={onRecordWin} isRecordingWin={isRecordingWin} />
       </div>
 
       <div className="flex justify-center gap-4">
