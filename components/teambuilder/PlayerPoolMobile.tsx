@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { useMemo, useState } from "react";
 import { Member } from "@/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -9,36 +8,35 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Search, Users } from "lucide-react";
 
 interface PlayerPoolMobileProps {
+  members: Member[];
   selectedIds: string[];
   onToggle: (member: Member) => void;
 }
 
 export function PlayerPoolMobile({
+  members,
   selectedIds,
   onToggle,
 }: PlayerPoolMobileProps) {
-  const [members, setMembers] = useState<Member[]>([]);
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
 
-  useEffect(() => {
-    const fetchMembers = async () => {
-      const { data } = await supabase
-        .from("members")
-        .select("*")
-        .order("nickname", { ascending: true });
-      if (data) setMembers(data);
-    };
-    fetchMembers();
-  }, []);
-
-  const filteredMembers = members.filter(
-    (m) =>
-      m.nickname.toLowerCase().includes(search.toLowerCase()) ||
-      m.lol_id.toLowerCase().includes(search.toLowerCase())
+  const filteredMembers = useMemo(
+    () =>
+      [...members]
+        .sort((a, b) => a.nickname.localeCompare(b.nickname))
+        .filter(
+          (member) =>
+            member.nickname.toLowerCase().includes(search.toLowerCase()) ||
+            member.lol_id.toLowerCase().includes(search.toLowerCase())
+        ),
+    [members, search]
   );
 
-  const selectedMembers = members.filter((m) => selectedIds.includes(m.id));
+  const selectedMembers = useMemo(
+    () => members.filter((member) => selectedIds.includes(member.id)),
+    [members, selectedIds]
+  );
   const selectedNames =
     selectedMembers.length > 0
       ? selectedMembers.map((m) => m.nickname).join(", ")

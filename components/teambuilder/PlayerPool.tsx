@@ -1,43 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { useMemo, useState } from "react";
 import { Member } from "@/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Search } from "lucide-react";
-import { useTeam } from "@/context/TeamContext";
 
 interface PlayerPoolProps {
+  members: Member[];
   selectedIds: string[];
   onToggle: (member: Member) => void;
 }
 
-export function PlayerPool({ selectedIds, onToggle }: PlayerPoolProps) {
-  const { currentTeam } = useTeam();
-  const [members, setMembers] = useState<Member[]>([]);
+export function PlayerPool({ members, selectedIds, onToggle }: PlayerPoolProps) {
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    if (!currentTeam) return;
-
-    const fetchMembers = async () => {
-      const { data } = await supabase
-        .from("members")
-        .select("*")
-        .eq("team_id", currentTeam.id)
-        .order("nickname", { ascending: true });
-      if (data) setMembers(data);
-    };
-    fetchMembers();
-  }, [currentTeam]);
-
-  const filteredMembers = members.filter(
-    (m) =>
-      m.nickname.toLowerCase().includes(search.toLowerCase()) ||
-      m.lol_id.toLowerCase().includes(search.toLowerCase())
+  const filteredMembers = useMemo(
+    () =>
+      [...members]
+        .sort((a, b) => a.nickname.localeCompare(b.nickname))
+        .filter(
+          (member) =>
+            member.nickname.toLowerCase().includes(search.toLowerCase()) ||
+            member.lol_id.toLowerCase().includes(search.toLowerCase())
+        ),
+    [members, search]
   );
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PlayerPool } from "@/components/teambuilder/PlayerPool";
 import { PlayerPoolMobile } from "@/components/teambuilder/PlayerPoolMobile";
 import { ConstraintControls } from "@/components/teambuilder/ConstraintControls";
@@ -16,11 +16,9 @@ import { Wand2, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useTeam } from "@/context/TeamContext";
 import { LoginScreen } from "@/components/auth/LoginScreen";
-import { readLocalState, writeLocalState } from "@/lib/persistence/localStorage";
+import { useTeamMembersRealtime } from "@/lib/realtime/useTeamMembersRealtime";
+import { useCollaborativeTeamBuilderDraft } from "@/lib/realtime/useCollaborativeTeamBuilderDraft";
 import {
-  getTeamBuilderStorageKey,
-  isSameTeamBuilderState,
-  safeParseTeamBuilderState,
   sanitizeGroups,
   sanitizeTeamBuilderState,
   TeamBuilderPersistedState,
@@ -29,6 +27,72 @@ import {
 
 type GroupsState = Record<string, string[]>;
 const MAX_FIXED_POSITIONS = 4;
+
+function areGroupsEqual(a: GroupsState, b: GroupsState): boolean {
+  const aEntries = Object.entries(a).sort(([aKey], [bKey]) =>
+    aKey.localeCompare(bKey)
+  );
+  const bEntries = Object.entries(b).sort(([aKey], [bKey]) =>
+    aKey.localeCompare(bKey)
+  );
+
+  if (aEntries.length !== bEntries.length) {
+    return false;
+  }
+
+  return aEntries.every(([aGroupId, aMembers], index) => {
+    const [bGroupId, bMembers] = bEntries[index] ?? [];
+    if (aGroupId !== bGroupId) {
+      return false;
+    }
+
+    const aSorted = [...aMembers].sort((first, second) =>
+      first.localeCompare(second)
+    );
+    const bSorted = [...bMembers].sort((first, second) =>
+      first.localeCompare(second)
+    );
+
+    if (aSorted.length !== bSorted.length) {
+      return false;
+    }
+
+    return aSorted.every((memberId, memberIndex) => memberId === bSorted[memberIndex]);
+  });
+}
+
+function arePlayersEqual(a: Player[], b: Player[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((player, index) => {
+    const other = b[index];
+    if (!other) {
+      return false;
+    }
+
+    const aPositions = player.selectedPositions ?? [];
+    const bPositions = other.selectedPositions ?? [];
+
+    if (aPositions.length !== bPositions.length) {
+      return false;
+    }
+
+    const positionsMatch = aPositions.every(
+      (position, posIndex) => position === bPositions[posIndex]
+    );
+
+    return (
+      player.id === other.id &&
+      player.nickname === other.nickname &&
+      player.lol_id === other.lol_id &&
+      player.main_position === other.main_position &&
+      Boolean(player.fixedPosition) === Boolean(other.fixedPosition) &&
+      positionsMatch
+    );
+  });
+}
 
 function normalizeSelectedPositions(
   positions?: Position[]
@@ -63,6 +127,16 @@ function buildPlayerConstraints(
   return constraints;
 }
 
+function createEmptyTeamBuilderState(): TeamBuilderPersistedState {
+  return {
+    version: 1,
+    selectedPlayerIds: [],
+    playerConstraints: {},
+    groups: {},
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function buildTeamBuilderPersistedState(
   players: Player[],
   groups: GroupsState
@@ -79,8 +153,95 @@ function buildTeamBuilderPersistedState(
   };
 }
 
+function deriveLocalStateFromDraft(
+  draftState: TeamBuilderPersistedState | null,
+  members: Member[]
+): {
+  selectedPlayers: Player[];
+  groups: GroupsState;
+  normalizedDraftState: TeamBuilderPersistedState;
+} {
+  const validMemberIds = new Set(members.map((member) => member.id));
+  const memberById = new Map(members.map((member) => [member.id, member]));
+
+  const sourceState = sanitizeTeamBuilderState(
+    draftState ?? createEmptyTeamBuilderState(),
+    validMemberIds
+  );
+
+  const selectedPlayerIds = sourceState.selectedPlayerIds.slice(0, 10);
+  const selectedIdSet = new Set(selectedPlayerIds);
+  const playerConstraints: Record<string, TeamBuilderPlayerConstraint> = {};
+
+  selectedPlayerIds.forEach((playerId) => {
+    const constraint = sourceState.playerConstraints[playerId];
+    if (!constraint) {
+      return;
+    }
+
+    if (!constraint.fixedPosition) {
+      playerConstraints[playerId] = { fixedPosition: false };
+      return;
+    }
+
+    const selectedPositions = normalizeSelectedPositions(
+      constraint.selectedPositions
+    );
+
+    playerConstraints[playerId] = {
+      fixedPosition: true,
+      ...(selectedPositions
+        ? { selectedPositions }
+        : {}),
+    };
+  });
+
+  const normalizedGroups = sanitizeGroups(sourceState.groups, selectedIdSet);
+
+  const selectedPlayers = selectedPlayerIds
+    .map((playerId) => {
+      const member = memberById.get(playerId);
+      if (!member) {
+        return null;
+      }
+
+      const constraint = playerConstraints[playerId];
+      return {
+        ...member,
+        ...(constraint
+          ? {
+              fixedPosition: constraint.fixedPosition,
+              ...(constraint.selectedPositions
+                ? { selectedPositions: constraint.selectedPositions }
+                : {}),
+            }
+          : {}),
+      };
+    })
+    .filter((player): player is Player => player !== null);
+
+  const normalizedDraftState = buildTeamBuilderPersistedState(
+    selectedPlayers,
+    normalizedGroups
+  );
+
+  return {
+    selectedPlayers,
+    groups: normalizedDraftState.groups,
+    normalizedDraftState,
+  };
+}
+
 export default function TeamBuilderPage() {
   const { currentTeam, isLoading: isAuthLoading } = useTeam();
+  const teamId = currentTeam?.id;
+  const { members, isLoading: isMembersLoading } = useTeamMembersRealtime(teamId);
+  const {
+    draftState,
+    isReady: isDraftReady,
+    remoteVersion,
+    scheduleSave,
+  } = useCollaborativeTeamBuilderDraft(teamId);
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
   const [groups, setGroups] = useState<GroupsState>({});
   const [teamResult, setTeamResult] = useState<TeamResult | null>(null);
@@ -88,11 +249,13 @@ export default function TeamBuilderPage() {
   const [isRecordingWin, setIsRecordingWin] = useState(false);
   const [generationId, setGenerationId] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+  const hydratedTeamIdRef = useRef<string | null>(null);
+  const handledRemoteVersionRef = useRef(0);
 
   useEffect(() => {
-    const teamId = currentTeam?.id;
-
     if (!teamId) {
+      hydratedTeamIdRef.current = null;
+      handledRemoteVersionRef.current = 0;
       setSelectedPlayers([]);
       setGroups({});
       setTeamResult(null);
@@ -101,140 +264,118 @@ export default function TeamBuilderPage() {
       return;
     }
 
-    let isCancelled = false;
-
-    const hydrateTeamBuilderState = async () => {
-      setIsHydrated(false);
-
-      const storageKey = getTeamBuilderStorageKey(teamId);
-      const { data: membersData, error: membersError } = await supabase
-        .from("members")
-        .select("*")
-        .eq("team_id", teamId)
-        .order("nickname", { ascending: true });
-
-      if (isCancelled) {
-        return;
-      }
-
-      if (membersError || !membersData) {
-        setSelectedPlayers([]);
-        setGroups({});
-        setTeamResult(null);
-        setGenerationId(null);
-        setIsHydrated(false);
-        return;
-      }
-
-      const memberById = new Map(membersData.map((member) => [member.id, member]));
-      const validMemberIds = new Set(membersData.map((member) => member.id));
-
-      const persistedState = readLocalState({
-        key: storageKey,
-        safeParse: safeParseTeamBuilderState,
-      });
-
-      if (!persistedState) {
-        setSelectedPlayers([]);
-        setGroups({});
-        setTeamResult(null);
-        setGenerationId(null);
-        setIsHydrated(true);
-        return;
-      }
-
-      const sanitizedPersistedState = sanitizeTeamBuilderState(
-        persistedState,
-        validMemberIds
-      );
-      const selectedPlayerIds = sanitizedPersistedState.selectedPlayerIds.slice(
-        0,
-        10
-      );
-      const selectedIdSet = new Set(selectedPlayerIds);
-      const playerConstraints: Record<string, TeamBuilderPlayerConstraint> = {};
-
-      selectedPlayerIds.forEach((playerId) => {
-        const constraint = sanitizedPersistedState.playerConstraints[playerId];
-        if (!constraint) {
-          return;
-        }
-
-        playerConstraints[playerId] = {
-          fixedPosition: constraint.fixedPosition,
-          ...(constraint.selectedPositions
-            ? { selectedPositions: constraint.selectedPositions }
-            : {}),
-        };
-      });
-
-      const sanitizedState = {
-        ...sanitizedPersistedState,
-        selectedPlayerIds,
-        playerConstraints,
-        groups: sanitizeGroups(sanitizedPersistedState.groups, selectedIdSet),
-      };
-
-      const restoredPlayers = sanitizedState.selectedPlayerIds
-        .map((playerId) => {
-          const member = memberById.get(playerId);
-          if (!member) {
-            return null;
-          }
-
-          const constraint = sanitizedState.playerConstraints[playerId];
-          return {
-            ...member,
-            ...(constraint
-              ? {
-                  fixedPosition: constraint.fixedPosition,
-                  ...(constraint.selectedPositions
-                    ? { selectedPositions: constraint.selectedPositions }
-                    : {}),
-                }
-              : {}),
-          };
-        })
-        .filter((player): player is Player => player !== null);
-
-      const restoredState = buildTeamBuilderPersistedState(
-        restoredPlayers,
-        sanitizedState.groups
-      );
-
-      setSelectedPlayers(restoredPlayers);
-      setGroups(restoredState.groups);
-      setTeamResult(null);
-      setGenerationId(null);
-      setIsHydrated(true);
-
-      if (!isSameTeamBuilderState(persistedState, restoredState)) {
-        writeLocalState({
-          key: storageKey,
-          value: restoredState,
-        });
-      }
-    };
-
-    void hydrateTeamBuilderState();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [currentTeam?.id]);
+    hydratedTeamIdRef.current = null;
+    handledRemoteVersionRef.current = 0;
+    setSelectedPlayers([]);
+    setGroups({});
+    setTeamResult(null);
+    setGenerationId(null);
+    setIsHydrated(false);
+  }, [teamId]);
 
   useEffect(() => {
-    const teamId = currentTeam?.id;
+    if (!teamId || !isDraftReady || isMembersLoading) {
+      return;
+    }
+
+    if (hydratedTeamIdRef.current === teamId) {
+      return;
+    }
+
+    const { selectedPlayers: restoredPlayers, groups: restoredGroups, normalizedDraftState } =
+      deriveLocalStateFromDraft(draftState, members);
+
+    setSelectedPlayers(restoredPlayers);
+    setGroups(restoredGroups);
+    setTeamResult(null);
+    setGenerationId(null);
+    setIsHydrated(true);
+    hydratedTeamIdRef.current = teamId;
+    handledRemoteVersionRef.current = remoteVersion;
+    scheduleSave(normalizedDraftState);
+  }, [
+    teamId,
+    isDraftReady,
+    isMembersLoading,
+    draftState,
+    members,
+    remoteVersion,
+    scheduleSave,
+  ]);
+
+  useEffect(() => {
+    if (!teamId || !isHydrated || !isDraftReady) {
+      return;
+    }
+
+    if (remoteVersion <= handledRemoteVersionRef.current) {
+      return;
+    }
+
+    handledRemoteVersionRef.current = remoteVersion;
+
+    const { selectedPlayers: restoredPlayers, groups: restoredGroups } =
+      deriveLocalStateFromDraft(draftState, members);
+    setSelectedPlayers(restoredPlayers);
+    setGroups(restoredGroups);
+    setTeamResult(null);
+    setGenerationId(null);
+  }, [teamId, isHydrated, isDraftReady, remoteVersion, draftState, members]);
+
+  useEffect(() => {
     if (!teamId || !isHydrated) {
       return;
     }
 
-    const nextState = buildTeamBuilderPersistedState(selectedPlayers, groups);
-    writeLocalState({
-      key: getTeamBuilderStorageKey(teamId),
-      value: nextState,
-    });
-  }, [currentTeam?.id, groups, isHydrated, selectedPlayers]);
+    const memberById = new Map(members.map((member) => [member.id, member]));
+    const nextPlayers = selectedPlayers
+      .map((player) => {
+        const member = memberById.get(player.id);
+        if (!member) {
+          return null;
+        }
+
+        const selectedPositions = normalizeSelectedPositions(player.selectedPositions);
+        const nextPlayer: Player = {
+          ...member,
+          ...(player.fixedPosition
+            ? { fixedPosition: true }
+            : {}),
+          ...(selectedPositions
+            ? { selectedPositions }
+            : {}),
+        };
+        return nextPlayer;
+      })
+      .filter((player): player is Player => player !== null);
+
+    const selectedIdSet = new Set(nextPlayers.map((player) => player.id));
+    const nextGroups = sanitizeGroups(groups, selectedIdSet);
+
+    const playersChanged = !arePlayersEqual(selectedPlayers, nextPlayers);
+    const groupsChanged = !areGroupsEqual(groups, nextGroups);
+
+    if (playersChanged) {
+      setSelectedPlayers(nextPlayers);
+    }
+
+    if (groupsChanged) {
+      setGroups(nextGroups);
+    }
+
+    if ((playersChanged || groupsChanged) && teamResult) {
+      setTeamResult(null);
+      setGenerationId(null);
+    }
+  }, [teamId, isHydrated, members, groups, selectedPlayers, teamResult]);
+
+  useEffect(() => {
+    if (!teamId || !isHydrated) {
+      return;
+    }
+
+    scheduleSave(buildTeamBuilderPersistedState(selectedPlayers, groups));
+  }, [teamId, isHydrated, selectedPlayers, groups, scheduleSave]);
 
   if (isAuthLoading) {
     return (
@@ -246,6 +387,14 @@ export default function TeamBuilderPage() {
 
   if (!currentTeam) {
     return <LoginScreen />;
+  }
+
+  if (!isHydrated || isMembersLoading || !isDraftReady) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="w-8 h-8 animate-spin text-zinc-500" />
+      </div>
+    );
   }
 
   const handleTogglePlayer = (member: Member) => {
@@ -467,6 +616,7 @@ export default function TeamBuilderPage() {
         {/* Left: Player Selection (3 cols on desktop) */}
         <div className="lg:col-span-3 h-full min-h-0">
           <PlayerPool
+            members={members}
             selectedIds={selectedPlayers.map((p) => p.id)}
             onToggle={handleTogglePlayer}
           />
@@ -502,6 +652,7 @@ export default function TeamBuilderPage() {
       <div className="flex flex-col lg:hidden gap-4 pb-12">
         {/* Player Pool - Bottom Sheet */}
         <PlayerPoolMobile
+          members={members}
           selectedIds={selectedPlayers.map((p) => p.id)}
           onToggle={handleTogglePlayer}
         />

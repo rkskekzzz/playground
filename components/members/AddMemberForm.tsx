@@ -32,11 +32,7 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
-interface AddMemberFormProps {
-  onMemberAdded: () => void;
-}
-
-export function AddMemberForm({ onMemberAdded }: AddMemberFormProps) {
+export function AddMemberForm() {
   const { currentTeam } = useTeam();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const {
@@ -66,7 +62,6 @@ export function AddMemberForm({ onMemberAdded }: AddMemberFormProps) {
 
       toast.success("Member added successfully!");
       reset();
-      onMemberAdded();
     } catch (error: unknown) {
       toast.error("Failed to add member: " + getErrorMessage(error));
     } finally {

@@ -24,6 +24,7 @@ import {
 import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
 import { Member } from '@/types'
+import { useTeam } from '@/context/TeamContext'
 
 const formSchema = z.object({
   nickname: z.string().min(1, 'Nickname is required'),
@@ -42,10 +43,10 @@ interface EditMemberModalProps {
   member: Member | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onMemberUpdated: () => void
 }
 
-export function EditMemberModal({ member, open, onOpenChange, onMemberUpdated }: EditMemberModalProps) {
+export function EditMemberModal({ member, open, onOpenChange }: EditMemberModalProps) {
+  const { currentTeam } = useTeam()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -64,7 +65,7 @@ export function EditMemberModal({ member, open, onOpenChange, onMemberUpdated }:
   }, [member, setValue])
 
   const onSubmit = async (data: FormData) => {
-    if (!member) return
+    if (!member || !currentTeam) return
 
     setIsSubmitting(true)
     try {
@@ -76,11 +77,11 @@ export function EditMemberModal({ member, open, onOpenChange, onMemberUpdated }:
           main_position: data.main_position || null,
         })
         .eq('id', member.id)
+        .eq('team_id', currentTeam.id)
 
       if (error) throw error
 
       toast.success('Member updated successfully!')
-      onMemberUpdated()
       onOpenChange(false)
     } catch (error: unknown) {
       toast.error('Failed to update member: ' + getErrorMessage(error))

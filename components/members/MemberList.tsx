@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Member } from "@/types";
 import {
@@ -16,54 +16,48 @@ import { Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { EditMemberModal } from "./EditMemberModal";
 import { useTeam } from "@/context/TeamContext";
+import { useTeamMembersRealtime } from "@/lib/realtime/useTeamMembersRealtime";
 
-interface MemberListProps {
-  refreshTrigger: number;
-}
-
-export function MemberList({ refreshTrigger }: MemberListProps) {
+export function MemberList() {
   const { currentTeam } = useTeam();
-  const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(true);
+  const teamId = currentTeam?.id;
+  const { members, isLoading } = useTeamMembersRealtime(teamId);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const fetchMembers = async () => {
-    if (!currentTeam) return;
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("members")
-      .select("*")
-      .eq("team_id", currentTeam.id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      toast.error("Failed to fetch members");
-    } else {
-      setMembers(data || []);
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchMembers();
-  }, [refreshTrigger, currentTeam]);
+  const sortedMembers = useMemo(
+    () =>
+      [...members].sort((a, b) => {
+        const aTime = new Date(a.created_at).getTime();
+        const bTime = new Date(b.created_at).getTime();
+        return bTime - aTime;
+      }),
+    [members]
+  );
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this member?")) return;
+    if (!teamId) {
+      return;
+    }
 
-    const { error } = await supabase.from("members").delete().eq("id", id);
+    if (!confirm("Are you sure you want to delete this member?")) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("members")
+      .delete()
+      .eq("id", id)
+      .eq("team_id", teamId);
 
     if (error) {
       toast.error("Failed to delete member");
     } else {
       toast.success("Member deleted");
-      fetchMembers();
     }
   };
 
-  if (loading)
+  if (isLoading)
     return (
       <div className="text-center p-4 text-zinc-400">Loading members...</div>
     );
@@ -80,14 +74,14 @@ export function MemberList({ refreshTrigger }: MemberListProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {members.length === 0 ? (
+          {sortedMembers.length === 0 ? (
             <TableRow>
               <TableCell colSpan={4} className="text-center h-24 text-zinc-500">
                 No members found. Add some!
               </TableCell>
             </TableRow>
           ) : (
-            members.map((member) => (
+            sortedMembers.map((member) => (
               <TableRow
                 key={member.id}
                 className="border-zinc-800 hover:bg-zinc-900/50"
@@ -132,7 +126,6 @@ export function MemberList({ refreshTrigger }: MemberListProps) {
         member={editingMember}
         open={isEditModalOpen}
         onOpenChange={setIsEditModalOpen}
-        onMemberUpdated={fetchMembers}
       />
     </div>
   );

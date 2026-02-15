@@ -14,16 +14,27 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { formatDistanceToNow } from 'date-fns'
+import { useTeam } from '@/context/TeamContext'
 
 export function GameHistory() {
+  const { currentTeam } = useTeam()
   const [games, setGames] = useState<Game[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!currentTeam) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setGames([])
+      setLoading(false)
+      return
+    }
+
     const fetchGames = async () => {
+      setLoading(true)
       const { data } = await supabase
         .from('games')
         .select('*')
+        .eq('team_id', currentTeam.id)
         .order('played_at', { ascending: false })
         .limit(10)
 
@@ -31,7 +42,7 @@ export function GameHistory() {
       setLoading(false)
     }
     fetchGames()
-  }, [])
+  }, [currentTeam])
 
   if (loading) return <div className="text-zinc-500">Loading history...</div>
 
