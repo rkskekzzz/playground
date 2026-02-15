@@ -8,7 +8,7 @@ const VALID_POSITIONS: Position[] = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
 
 export interface TeamBuilderPlayerConstraint {
   fixedPosition: boolean;
-  selectedPosition?: Position;
+  selectedPositions?: Position[];
 }
 
 export interface TeamBuilderPersistedState {
@@ -28,6 +28,19 @@ function isValidPosition(value: unknown): value is Position {
     typeof value === "string" &&
     VALID_POSITIONS.includes(value as Position)
   );
+}
+
+function sanitizeSelectedPositions(rawConstraint: Record<string, unknown>): Position[] {
+  if (Array.isArray(rawConstraint.selectedPositions)) {
+    const positions = rawConstraint.selectedPositions.filter(isValidPosition);
+    return Array.from(new Set(positions)).slice(0, 4);
+  }
+
+  if (isValidPosition(rawConstraint.selectedPosition)) {
+    return [rawConstraint.selectedPosition];
+  }
+
+  return [];
 }
 
 function uniqueStringList(values: string[]): string[] {
@@ -97,13 +110,11 @@ export function safeParseTeamBuilderState(
     }
 
     const fixedPosition = rawConstraint.fixedPosition;
-    const selectedPosition = isValidPosition(rawConstraint.selectedPosition)
-      ? rawConstraint.selectedPosition
-      : undefined;
+    const selectedPositions = sanitizeSelectedPositions(rawConstraint);
 
     playerConstraints[playerId] = {
       fixedPosition,
-      ...(selectedPosition ? { selectedPosition } : {}),
+      ...(selectedPositions.length > 0 ? { selectedPositions } : {}),
     };
   });
 
@@ -144,8 +155,12 @@ export function sanitizeTeamBuilderState(
 
     playerConstraints[playerId] = {
       fixedPosition: constraint.fixedPosition,
-      ...(constraint.selectedPosition
-        ? { selectedPosition: constraint.selectedPosition }
+      ...(constraint.selectedPositions && constraint.selectedPositions.length > 0
+        ? {
+            selectedPositions: Array.from(
+              new Set(constraint.selectedPositions.filter(isValidPosition))
+            ).slice(0, 4),
+          }
         : {}),
     };
   });
@@ -169,8 +184,14 @@ function normalizeForComparison(state: TeamBuilderPersistedState) {
         playerId,
         {
           fixedPosition: Boolean(constraint.fixedPosition),
-          ...(constraint.selectedPosition
-            ? { selectedPosition: constraint.selectedPosition }
+          ...(constraint.selectedPositions && constraint.selectedPositions.length > 0
+            ? {
+                selectedPositions: Array.from(
+                  new Set(constraint.selectedPositions.filter(isValidPosition))
+                )
+                  .slice(0, 4)
+                  .sort((a, b) => a.localeCompare(b)),
+              }
             : {}),
         },
       ])

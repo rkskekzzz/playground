@@ -6,8 +6,9 @@ import { PlayerPoolMobile } from "@/components/teambuilder/PlayerPoolMobile";
 import { ConstraintControls } from "@/components/teambuilder/ConstraintControls";
 import { ConstraintControlsMobile } from "@/components/teambuilder/ConstraintControlsMobile";
 import { FixedPositionMobile } from "@/components/teambuilder/FixedPositionMobile";
+import { PreMadeGroups } from "@/components/teambuilder/PreMadeGroups";
 import { TeamDisplay } from "@/components/teambuilder/TeamDisplay";
-import { Player, TeamResult, generateTeams } from "@/lib/teamLogic";
+import { Player, Position, TeamResult, generateTeams } from "@/lib/teamLogic";
 import { Member } from "@/types";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -27,6 +28,22 @@ import {
 } from "@/lib/persistence/schemas/teamBuilder";
 
 type GroupsState = Record<string, string[]>;
+const MAX_FIXED_POSITIONS = 4;
+
+function normalizeSelectedPositions(
+  positions?: Position[]
+): Position[] | undefined {
+  if (!positions || positions.length === 0) {
+    return undefined;
+  }
+
+  const uniquePositions = Array.from(new Set(positions)).slice(
+    0,
+    MAX_FIXED_POSITIONS
+  );
+
+  return uniquePositions.length > 0 ? uniquePositions : undefined;
+}
 
 function buildPlayerConstraints(
   players: Player[]
@@ -34,10 +51,11 @@ function buildPlayerConstraints(
   const constraints: Record<string, TeamBuilderPlayerConstraint> = {};
 
   players.forEach((player) => {
+    const selectedPositions = normalizeSelectedPositions(player.selectedPositions);
     constraints[player.id] = {
       fixedPosition: Boolean(player.fixedPosition),
-      ...(player.selectedPosition
-        ? { selectedPosition: player.selectedPosition }
+      ...(selectedPositions
+        ? { selectedPositions }
         : {}),
     };
   });
@@ -144,8 +162,8 @@ export default function TeamBuilderPage() {
 
         playerConstraints[playerId] = {
           fixedPosition: constraint.fixedPosition,
-          ...(constraint.selectedPosition
-            ? { selectedPosition: constraint.selectedPosition }
+          ...(constraint.selectedPositions
+            ? { selectedPositions: constraint.selectedPositions }
             : {}),
         };
       });
@@ -170,8 +188,8 @@ export default function TeamBuilderPage() {
             ...(constraint
               ? {
                   fixedPosition: constraint.fixedPosition,
-                  ...(constraint.selectedPosition
-                    ? { selectedPosition: constraint.selectedPosition }
+                  ...(constraint.selectedPositions
+                    ? { selectedPositions: constraint.selectedPositions }
                     : {}),
                 }
               : {}),
@@ -249,10 +267,28 @@ export default function TeamBuilderPage() {
   };
 
   const handleUpdatePlayer = (playerId: string, updates: Partial<Player>) => {
-    const normalizedUpdates =
-      updates.fixedPosition === false
-        ? { ...updates, selectedPosition: undefined }
-        : updates;
+    let normalizedUpdates: Partial<Player> = { ...updates };
+
+    if (updates.selectedPositions) {
+      const uniqueSelectedPositions = Array.from(
+        new Set(updates.selectedPositions)
+      );
+
+      if (uniqueSelectedPositions.length > MAX_FIXED_POSITIONS) {
+        toast.error("고정 포지션은 최대 4개까지 선택할 수 있습니다.");
+      }
+
+      normalizedUpdates.selectedPositions = normalizeSelectedPositions(
+        uniqueSelectedPositions
+      );
+    }
+
+    if (updates.fixedPosition === false) {
+      normalizedUpdates = {
+        ...normalizedUpdates,
+        selectedPositions: undefined,
+      };
+    }
 
     setSelectedPlayers((prev) =>
       prev.map((p) => (p.id === playerId ? { ...p, ...normalizedUpdates } : p))
@@ -437,23 +473,28 @@ export default function TeamBuilderPage() {
         </div>
 
         {/* Middle: Constraints (3 cols on desktop) */}
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-3 min-h-0">
           <ConstraintControls
             selectedPlayers={selectedPlayers}
             onUpdatePlayer={handleUpdatePlayer}
-            groups={groups}
-            onCreateGroup={handleCreateGroup}
-            onDeleteGroup={handleDeleteGroup}
           />
         </div>
 
         {/* Right: Result (6 cols on desktop) */}
-        <div className="lg:col-span-6">
-          <TeamDisplay
-            result={teamResult}
-            onRecordWin={handleRecordWin}
-            isRecordingWin={isRecordingWin}
+        <div className="lg:col-span-6 min-h-0 flex flex-col gap-4">
+          <PreMadeGroups
+            selectedPlayers={selectedPlayers}
+            groups={groups}
+            onCreateGroup={handleCreateGroup}
+            onDeleteGroup={handleDeleteGroup}
           />
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+            <TeamDisplay
+              result={teamResult}
+              onRecordWin={handleRecordWin}
+              isRecordingWin={isRecordingWin}
+            />
+          </div>
         </div>
       </div>
 

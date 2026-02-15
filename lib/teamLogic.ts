@@ -2,9 +2,10 @@
 import { Member } from '@/types'
 
 export type Position = 'TOP' | 'JUNGLE' | 'MID' | 'ADC' | 'SUPPORT'
+const POSITIONS: Position[] = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT']
 
 export interface Player extends Member {
-  selectedPosition?: Position
+  selectedPositions?: Position[]
   fixedPosition?: boolean
   groupId?: string // Players with same groupId must be on same team
 }
@@ -34,10 +35,7 @@ export function generateTeams(
     return null
   }
 
-  // 2. Separate players by constraints
-  const fixedPlayers = players.filter(p => p.fixedPosition && p.selectedPosition)
-
-  // 3. Initialize Teams
+  // 2. Initialize Teams
   // We'll try to fill slots.
   // Strategy:
   // - Assign fixed players first.
@@ -50,19 +48,7 @@ export function generateTeams(
   const MAX_ATTEMPTS = 1000
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    // A. Assign Fixed Players
-    for (const p of fixedPlayers) {
-      // Randomly assign to Blue or Red if not already taken?
-      // Wait, "Fixed Position" usually means "I want to play MID". It doesn't mean "I want to play Blue MID".
-      // So we need to find a side for them.
-
-      // If two players want Fixed MID, one goes Blue, one goes Red.
-      // If three players want Fixed MID, impossible -> Fail.
-
-      // Let's track assigned fixed players
-    }
-
-    // Actually, a simpler approach for N=10:
+    // A simpler approach for N=10:
     // 1. Partition 10 players into Team Blue (5) and Team Red (5) respecting Groups.
     // 2. For each team, assign positions respecting Fixed Positions.
 
@@ -103,7 +89,6 @@ export function generateTeams(
     // Since units are small (max 5), random shuffle check is fast enough.
 
     let currentA = 0
-    let currentB = 0
 
     for (const unit of shuffledUnits) {
       if (currentA + unit.length <= 5) {
@@ -111,7 +96,6 @@ export function generateTeams(
         currentA += unit.length
       } else {
         teamB.push(...unit)
-        currentB += unit.length
       }
     }
 
@@ -121,28 +105,64 @@ export function generateTeams(
 
     // Step 2: Assign Positions within Teams
     const assignPositions = (teamPlayers: Player[]): Record<Position, Player> | null => {
-      const positions: Position[] = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT']
       const assigned: Partial<Record<Position, Player>> = {}
-      const unassignedPlayers: Player[] = []
-      const availablePositions = new Set(positions)
+      const availablePositions = new Set(POSITIONS)
+      const assignedPlayerIds = new Set<string>()
 
-      // 1. Place Fixed Position Players
-      for (const p of teamPlayers) {
-        if (p.fixedPosition && p.selectedPosition) {
-          if (availablePositions.has(p.selectedPosition)) {
-            assigned[p.selectedPosition] = p
-            availablePositions.delete(p.selectedPosition)
-          } else {
-            return null // Conflict: Two fixed players for same position in same team
-          }
-        } else {
-          unassignedPlayers.push(p)
+      const constrainedPlayers = teamPlayers
+        .map(player => ({
+          player,
+          allowedPositions: Array.from(
+            new Set(
+              (player.fixedPosition ? player.selectedPositions : undefined) ?? []
+            )
+          ).filter((pos): pos is Position => POSITIONS.includes(pos as Position))
+        }))
+        .filter(item => item.allowedPositions.length > 0)
+        .sort((a, b) => a.allowedPositions.length - b.allowedPositions.length)
+
+      // 1. Place Fixed Position Players with backtracking.
+      const assignFixedPlayers = (index: number): boolean => {
+        if (index >= constrainedPlayers.length) {
+          return true
         }
+
+        const { player, allowedPositions } = constrainedPlayers[index]
+        const candidatePositions = shuffle(
+          allowedPositions.filter(pos => availablePositions.has(pos))
+        )
+
+        for (const pos of candidatePositions) {
+          assigned[pos] = player
+          availablePositions.delete(pos)
+          assignedPlayerIds.add(player.id)
+
+          if (assignFixedPlayers(index + 1)) {
+            return true
+          }
+
+          delete assigned[pos]
+          availablePositions.add(pos)
+          assignedPlayerIds.delete(player.id)
+        }
+
+        return false
+      }
+
+      if (!assignFixedPlayers(0)) {
+        return null
       }
 
       // 2. Place Remaining Players (Randomly)
-      const remainingPositions = Array.from(availablePositions)
+      const remainingPositions = shuffle(Array.from(availablePositions))
+      const unassignedPlayers = teamPlayers.filter(
+        player => !assignedPlayerIds.has(player.id)
+      )
       const shuffledRemaining = shuffle(unassignedPlayers)
+
+      if (remainingPositions.length !== shuffledRemaining.length) {
+        return null
+      }
 
       for (let i = 0; i < shuffledRemaining.length; i++) {
         assigned[remainingPositions[i]] = shuffledRemaining[i]

@@ -3,7 +3,7 @@
 import {
   createContext,
   useContext,
-  useState,
+  useSyncExternalStore,
   ReactNode,
 } from "react";
 
@@ -21,6 +21,10 @@ interface TeamContextType {
 
 const TeamContext = createContext<TeamContextType | undefined>(undefined);
 const STORAGE_KEY = "team_playground_team";
+type Listener = () => void;
+const listeners = new Set<Listener>();
+let cachedRawTeam: string | null | undefined;
+let cachedTeam: Team | null = null;
 
 function readStoredTeam(): Team | null {
   if (typeof window === "undefined") {
@@ -41,20 +45,64 @@ function readStoredTeam(): Team | null {
   }
 }
 
+function emitStoreChange() {
+  listeners.forEach((listener) => listener());
+}
+
+function subscribe(listener: Listener) {
+  listeners.add(listener);
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", listener);
+  }
+
+  return () => {
+    listeners.delete(listener);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("storage", listener);
+    }
+  };
+}
+
+function getSnapshot() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const rawTeam = window.localStorage.getItem(STORAGE_KEY);
+  if (rawTeam === cachedRawTeam) {
+    return cachedTeam;
+  }
+
+  cachedRawTeam = rawTeam;
+  cachedTeam = readStoredTeam();
+  return cachedTeam;
+}
+
+function getServerSnapshot() {
+  return null;
+}
+
 export function TeamProvider({ children }: { children: ReactNode }) {
-  const [currentTeam, setCurrentTeam] = useState<Team | null>(() =>
-    readStoredTeam()
+  const currentTeam = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot
   );
   const isLoading = false;
 
   const login = (team: Team) => {
-    setCurrentTeam(team);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(team));
+    cachedRawTeam = JSON.stringify(team);
+    cachedTeam = team;
+    emitStoreChange();
   };
 
   const logout = () => {
-    setCurrentTeam(null);
     localStorage.removeItem(STORAGE_KEY);
+    cachedRawTeam = null;
+    cachedTeam = null;
+    emitStoreChange();
   };
 
   return (

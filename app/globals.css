@@ -128,4 +128,22 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [data-slot="switch"]:not([data-disabled]),
+  [data-slot="checkbox"]:not([data-disabled]),
+  [data-slot="select-trigger"]:not([data-disabled]),
+  [data-slot="select-item"]:not([data-disabled]) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  [data-slot="switch"][data-disabled],
+  [data-slot="checkbox"][data-disabled],
+  [data-slot="select-trigger"][data-disabled],
+  [data-slot="select-item"][data-disabled] {
+    cursor: not-allowed;
+  }
 }

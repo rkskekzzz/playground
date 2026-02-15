@@ -3,16 +3,12 @@
 import { useState } from "react";
 import { Player, Position } from "@/lib/teamLogic";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { MapPin } from "lucide-react";
+
+const POSITIONS: Position[] = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
 
 interface FixedPositionMobileProps {
   selectedPlayers: Player[];
@@ -29,9 +25,27 @@ export function FixedPositionMobile({
   const fixedInfo =
     fixedPlayers.length > 0
       ? fixedPlayers
-          .map((p) => `${p.nickname} (${p.selectedPosition})`)
+          .map((p) => {
+            const selectedPositions = p.selectedPositions ?? [];
+            const label =
+              selectedPositions.length > 0
+                ? selectedPositions.join("/")
+                : "미지정";
+            return `${p.nickname} (${label})`;
+          })
           .join(", ")
       : "고정 포지션 없음";
+
+  const toggleFixedPosition = (player: Player, position: Position) => {
+    const selectedPositions = player.selectedPositions ?? [];
+    const isSelected = selectedPositions.includes(position);
+
+    const nextSelectedPositions = isSelected
+      ? selectedPositions.filter((pos) => pos !== position)
+      : [...selectedPositions, position];
+
+    onUpdatePlayer(player.id, { selectedPositions: nextSelectedPositions });
+  };
 
   return (
     <>
@@ -91,25 +105,41 @@ export function FixedPositionMobile({
                 </div>
 
                 {player.fixedPosition && (
-                  <Select
-                    value={player.selectedPosition || ""}
-                    onValueChange={(val) =>
-                      onUpdatePlayer(player.id, {
-                        selectedPosition: val as Position,
-                      })
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select Position" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"].map((pos) => (
-                        <SelectItem key={pos} value={pos}>
-                          {pos}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[11px] text-zinc-500">최대 4개 선택</p>
+                      <p className="text-[11px] text-zinc-500">
+                        {(player.selectedPositions ?? []).length}/4
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {POSITIONS.map((position) => {
+                        const selectedPositions = player.selectedPositions ?? [];
+                        const isSelected = selectedPositions.includes(position);
+                        const isAtLimit =
+                          selectedPositions.length >= 4 && !isSelected;
+
+                        return (
+                          <Button
+                            key={position}
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={isAtLimit}
+                            onClick={() => toggleFixedPosition(player, position)}
+                            aria-pressed={isSelected}
+                            className={`h-8 text-xs ${
+                              isSelected
+                                ? "border-emerald-400 bg-emerald-500/25 text-emerald-100 hover:bg-emerald-500/35 ring-2 ring-emerald-500/50 shadow-[0_0_0_1px_rgba(16,185,129,0.55)]"
+                                : "border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                            }`}
+                          >
+                            {position}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
             ))
